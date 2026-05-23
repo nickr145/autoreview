@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(uv sync*)",
+      "Bash(uv run*)",
+      "Bash(uv add*)",
+      "Bash(uv pip*)",
+      "Bash(docker build*)",
+      "Bash(docker compose*)",
+      "Bash(docker run*)",
+      "Bash(docker ps*)",
+      "Bash(docker images*)",
+      "Bash(docker rm*)",
+      "Bash(docker rmi*)",
+      "Bash(docker logs*)",
+      "Bash(npm install*)",
+      "Bash(npm run*)",
+      "Bash(npx*)",
+      "Bash(node*)",
+      "Bash(python cli.py*)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run ruff*)",
+      "Bash(uv run python*)",
+      "Bash(ruff check*)",
+      "Bash(ruff format*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(find . *)",
+      "Bash(ls*)",
+      "Bash(mkdir*)",
+      "Bash(touch*)"
+    ],
+    "deny": []
+  }
+}

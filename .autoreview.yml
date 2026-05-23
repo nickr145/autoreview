@@ -1,0 +1,9 @@
+include:
+  - "src/**/*.py"
+  - "src/**/*.ts"
+exclude:
+  - "migrations/**"
+  - "**/test_*.py"
+severity_threshold: MEDIUM
+max_iterations: 3
+post_commit: false
