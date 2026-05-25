@@ -1,4 +1,15 @@
+import json
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+
+from core.config import settings
 from core.state import ReviewState
+from tools.diff_tool import extract_diff_files
+from tools.llm_tool import tool_loop
+from tools.patch_tool import apply_patch
 
 QUALITY_SYSTEM = """
 You are an expert Python/TypeScript engineer conducting a code review.
@@ -49,7 +60,87 @@ QUALITY_TOOLS = [
 ]
 
 
+def _parse_quality_response(raw: str) -> dict:
+    """Extract {"quality_issues": [...], "patches": [...]} from Claude's response."""
+    for pattern in [r"```(?:json)?\s*(\{.*?\})\s*```", r"(\{.*\})"]:
+        match = re.search(pattern, raw, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                continue
+    try:
+        return json.loads(raw.strip())
+    except json.JSONDecodeError:
+        pass
+    return {}
+
+
 def quality_node(state: ReviewState) -> dict:
-    # TODO (S2): call tool_loop with QUALITY_SYSTEM + QUALITY_TOOLS
-    # On retries, append state["test_output"] to user prompt for diagnosis
-    return {"patches": []}
+    pr_diff = state.get("pr_diff", "")
+    findings = state.get("findings", [])
+    iteration = state.get("iteration", 0)
+    test_output = state.get("test_output", "")
+    prev_patches = state.get("patches", [])
+
+    scratch = extract_diff_files(pr_diff)
+
+    def handle_check_complexity(file_path: str) -> str:
+        full = os.path.join(scratch, file_path.lstrip("/"))
+        if not os.path.exists(full):
+            return f"File not found: {file_path}"
+        result = subprocess.run(
+            ["radon", "cc", "-s", "-j", full],
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout or result.stderr
+
+    def handle_apply_patch(patch_content: str) -> str:
+        trial = tempfile.mkdtemp(prefix="autoreview-trial-")
+        shutil.copytree(scratch, trial, dirs_exist_ok=True)
+        try:
+            success, msg = apply_patch(trial, patch_content)
+            return f"{'OK' if success else 'FAILED'}: {msg}"
+        finally:
+            shutil.rmtree(trial, ignore_errors=True)
+
+    def handle_run_linter(file_path: str, language: str) -> str:
+        full = os.path.join(scratch, file_path.lstrip("/"))
+        if not os.path.exists(full):
+            return f"File not found: {file_path}"
+        if language == "python":
+            result = subprocess.run(
+                ["ruff", "check", "--output-format=json", full],
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout or "[]"
+        return "[]"
+
+    parts = [
+        f"PR Diff:\n\n{pr_diff}",
+        f"\nSecurity Findings:\n{json.dumps(findings, indent=2)}",
+    ]
+    if iteration > 0 and test_output:
+        parts.append(f"\nPrevious test run FAILED. Output:\n{test_output}")
+        if prev_patches:
+            parts.append("\nPrevious patches (failed):\n" + "\n---\n".join(prev_patches))
+
+    try:
+        raw = tool_loop(
+            system=QUALITY_SYSTEM,
+            user="\n".join(parts),
+            tools=QUALITY_TOOLS,
+            tool_handlers={
+                "check_complexity": handle_check_complexity,
+                "apply_patch": handle_apply_patch,
+                "run_linter": handle_run_linter,
+            },
+            model=settings.claude_quality_model,
+        )
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+    result = _parse_quality_response(raw)
+    return {"patches": result.get("patches", [])}
