@@ -87,6 +87,84 @@ class TestQualityNode:
 
 
 # ---------------------------------------------------------------------------
+# Test Runner
+# ---------------------------------------------------------------------------
+
+_PY_DIFF = "--- a/x.py\n+++ b/x.py\n+print('hello')\n"
+
+
+class TestTestRunnerNode:
+    @patch("agents.test_runner.run_in_sandbox", return_value=(0, "OK"))
+    def test_returns_required_keys(self, _mock):
+        from agents.test_runner import test_runner_node
+        result = test_runner_node(_make_state(pr_diff=_PY_DIFF))
+        assert "test_output" in result
+        assert "test_passed" in result
+        assert "iteration" in result
+
+    @patch("agents.test_runner.run_in_sandbox", return_value=(0, "OK"))
+    def test_iteration_increments(self, _mock):
+        from agents.test_runner import test_runner_node
+        result = test_runner_node(_make_state(pr_diff=_PY_DIFF, iteration=1))
+        assert result["iteration"] == 2
+
+    @patch("agents.test_runner.run_in_sandbox", return_value=(0, "OK"))
+    def test_passes_when_sandbox_exits_zero(self, _mock):
+        from agents.test_runner import test_runner_node
+        result = test_runner_node(_make_state(pr_diff=_PY_DIFF))
+        assert result["test_passed"] is True
+
+    @patch("agents.test_runner.run_in_sandbox", return_value=(1, "SyntaxError"))
+    def test_fails_when_syntax_check_fails(self, _mock):
+        from agents.test_runner import test_runner_node
+        result = test_runner_node(_make_state(pr_diff=_PY_DIFF))
+        assert result["test_passed"] is False
+
+    @patch("agents.test_runner.run_in_sandbox", return_value=(0, '{"results": [{"issue_severity": "HIGH"}], "metrics": {}}'))
+    def test_fails_when_bandit_finds_high_severity(self, _mock):
+        from agents.test_runner import test_runner_node
+        result = test_runner_node(_make_state(pr_diff=_PY_DIFF))
+        assert result["test_passed"] is False
+
+    @patch("agents.test_runner.apply_patch", return_value=(False, "hunk mismatch"))
+    def test_patch_failure_short_circuits(self, _mock):
+        from agents.test_runner import test_runner_node
+        result = test_runner_node(_make_state(pr_diff=_PY_DIFF, patches=["bad patch"]))
+        assert result["test_passed"] is False
+        assert "Patch application failed" in result["test_output"]
+
+    def test_no_python_files_passes_trivially(self):
+        from agents.test_runner import test_runner_node
+        # Diff with only a non-Python file — sandbox never called
+        diff = "--- a/README.md\n+++ b/README.md\n+# hello\n"
+        result = test_runner_node(_make_state(pr_diff=diff))
+        assert result["test_passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Fetcher
+# ---------------------------------------------------------------------------
+
+class TestFetcherNode:
+    def test_noop_when_pr_diff_already_set(self):
+        from core.graph import fetcher_node
+        result = fetcher_node(_make_state(pr_diff="existing diff"))
+        assert result == {}
+
+    @patch("core.graph.get_pr_diff", return_value="fetched diff")
+    def test_fetches_diff_when_empty(self, _mock):
+        from core.graph import fetcher_node
+        result = fetcher_node(_make_state())
+        assert result["pr_diff"] == "fetched diff"
+
+    @patch("core.graph.get_pr_diff", side_effect=Exception("no token"))
+    def test_graceful_failure_on_github_error(self, _mock):
+        from core.graph import fetcher_node
+        result = fetcher_node(_make_state())
+        assert "Diff fetch failed" in result["pr_diff"]
+
+
+# ---------------------------------------------------------------------------
 # Graph routing
 # ---------------------------------------------------------------------------
 
