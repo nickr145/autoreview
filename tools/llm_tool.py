@@ -25,13 +25,15 @@ def tool_loop(
     if thinking:
         extra["thinking"] = {"type": "enabled", "budget_tokens": settings.thinking_budget_tokens}
 
+    max_tokens = (settings.thinking_budget_tokens + 4096) if thinking else 4096
+
     while True:
         resp = client.messages.create(
             model=model,
             system=system,
             tools=tools,
             messages=messages,
-            max_tokens=4096,
+            max_tokens=max_tokens,
             **extra,
         )
 
