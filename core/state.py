@@ -12,6 +12,8 @@ class ReviewState(TypedDict):
     iteration: int
     pr_number: int
     repo_slug: str
+    input_tokens: Annotated[int, operator.add]
+    output_tokens: Annotated[int, operator.add]
 
 
 def initial_state(repo_slug: str, pr_number: int) -> ReviewState:
@@ -25,4 +27,6 @@ def initial_state(repo_slug: str, pr_number: int) -> ReviewState:
         iteration=0,
         pr_number=pr_number,
         repo_slug=repo_slug,
+        input_tokens=0,
+        output_tokens=0,
     )

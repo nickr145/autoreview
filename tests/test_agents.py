@@ -165,6 +165,71 @@ class TestFetcherNode:
 
 
 # ---------------------------------------------------------------------------
+# Publisher
+# ---------------------------------------------------------------------------
+
+class TestPublisherNode:
+    @patch("agents.publisher.post_review")
+    def test_calls_post_review_when_repo_and_pr_set(self, mock_post):
+        from agents.publisher import publisher_node
+        state = _make_state(
+            repo_slug="owner/repo",
+            pr_number=42,
+            findings=[{"file": "a.py", "line": 10, "severity": "HIGH", "description": "SQL injection", "confidence": 0.9}],
+        )
+        publisher_node(state)
+        mock_post.assert_called_once()
+
+    @patch("agents.publisher.post_review")
+    def test_skips_post_review_when_repo_slug_empty(self, mock_post):
+        from agents.publisher import publisher_node
+        state = _make_state(repo_slug="", pr_number=0)
+        publisher_node(state)
+        mock_post.assert_not_called()
+
+    def test_summary_includes_cost(self):
+        from agents.publisher import _build_summary
+        state = _make_state(
+            findings=[{"severity": "HIGH"}],
+            patches=["p1"],
+            test_passed=True,
+            iteration=1,
+            input_tokens=100_000,
+            output_tokens=20_000,
+        )
+        summary = _build_summary(state)
+        assert "100,000" in summary
+        assert "Est. cost" in summary
+
+    def test_summary_counts_severities(self):
+        from agents.publisher import _build_summary
+        state = _make_state(findings=[
+            {"severity": "HIGH"},
+            {"severity": "HIGH"},
+            {"severity": "MEDIUM"},
+        ])
+        summary = _build_summary(state)
+        assert "HIGH: 2" in summary
+        assert "MEDIUM: 1" in summary
+
+    def test_auditor_returns_token_keys(self):
+        """Auditor node must return input_tokens and output_tokens for state accumulation."""
+        with patch("agents.auditor.tool_loop", return_value="[]"):
+            from agents.auditor import auditor_node
+            result = auditor_node(_make_state())
+            assert "input_tokens" in result
+            assert "output_tokens" in result
+
+    def test_quality_returns_token_keys(self):
+        """Quality node must return input_tokens and output_tokens for state accumulation."""
+        with patch("agents.quality.tool_loop", return_value='{"patches": []}'):
+            from agents.quality import quality_node
+            result = quality_node(_make_state())
+            assert "input_tokens" in result
+            assert "output_tokens" in result
+
+
+# ---------------------------------------------------------------------------
 # Graph routing
 # ---------------------------------------------------------------------------
 

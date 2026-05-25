@@ -14,10 +14,13 @@ def tool_loop(
     tool_handlers: dict,
     model: str = "claude-sonnet-4-6",
     thinking: bool = False,
+    token_tracker: list | None = None,
 ) -> str:
     """Run the Claude tool-use loop until no more tool calls are emitted.
 
     tool_handlers maps tool name → callable(**tool_input) → str.
+    If token_tracker is provided, each (input_tokens, output_tokens) tuple
+    from the API response is appended so callers can accumulate cost.
     Returns the final text response from Claude.
     """
     messages: list[dict] = [{"role": "user", "content": user}]
@@ -36,6 +39,9 @@ def tool_loop(
             max_tokens=max_tokens,
             **extra,
         )
+
+        if token_tracker is not None and resp.usage:
+            token_tracker.append((resp.usage.input_tokens, resp.usage.output_tokens))
 
         text_blocks = [b.text for b in resp.content if b.type == "text"]
         tool_calls = [b for b in resp.content if b.type == "tool_use"]

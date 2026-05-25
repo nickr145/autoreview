@@ -127,6 +127,7 @@ def quality_node(state: ReviewState) -> dict:
         if prev_patches:
             parts.append("\nPrevious patches (failed):\n" + "\n---\n".join(prev_patches))
 
+    tracker: list = []
     try:
         raw = tool_loop(
             system=QUALITY_SYSTEM,
@@ -138,9 +139,14 @@ def quality_node(state: ReviewState) -> dict:
                 "run_linter": handle_run_linter,
             },
             model=settings.claude_quality_model,
+            token_tracker=tracker,
         )
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
     result = _parse_quality_response(raw)
-    return {"patches": result.get("patches", [])}
+    return {
+        "patches": result.get("patches", []),
+        "input_tokens": sum(t[0] for t in tracker),
+        "output_tokens": sum(t[1] for t in tracker),
+    }

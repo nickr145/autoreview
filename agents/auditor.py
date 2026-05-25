@@ -92,6 +92,7 @@ def auditor_node(state: ReviewState) -> dict:
         except FileNotFoundError:
             return f"File not found: {file_path}"
 
+    tracker: list = []
     try:
         raw = tool_loop(
             system=AUDITOR_SYSTEM,
@@ -103,8 +104,13 @@ def auditor_node(state: ReviewState) -> dict:
             },
             model=settings.claude_auditor_model,
             thinking=settings.thinking_enabled,
+            token_tracker=tracker,
         )
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 
-    return {"findings": _parse_findings(raw)}
+    return {
+        "findings": _parse_findings(raw),
+        "input_tokens": sum(t[0] for t in tracker),
+        "output_tokens": sum(t[1] for t in tracker),
+    }
